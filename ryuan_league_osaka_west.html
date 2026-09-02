@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>龍あんリーグ｜大阪西</title>
+<style>
+*{box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,"Noto Sans JP",sans-serif;margin:0;background:#f5f5f5;color:#222}
+header{position:sticky;top:0;background:#fff;padding:14px 12px 10px;border-bottom:1px solid #ddd;z-index:5}
+h1{font-size:20px;margin:0 0 8px}
+.controls{display:flex;gap:7px;flex-wrap:wrap}
+button,select,input{font:inherit;border:1px solid #ccc;border-radius:8px;background:#fff;padding:8px}
+button{cursor:pointer}
+main{padding:10px}
+.card{background:#fff;border:1px solid #ddd;border-radius:12px;padding:12px;margin-bottom:10px}
+.row{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+label{font-size:12px;color:#666;display:block;margin-bottom:3px}
+input,select{width:100%}
+.name{font-size:18px;font-weight:700;margin-bottom:5px}
+.badge{display:inline-block;padding:3px 7px;border-radius:999px;font-size:12px;margin-right:4px;background:#eee}
+.green{background:#dff3df}.yellow{background:#fff0bd}.red{background:#ffdede}
+.actions{display:flex;gap:6px;margin-top:9px}
+.actions button{flex:1}
+.small{font-size:12px;color:#666}
+#empty{padding:30px;text-align:center;color:#777}
+@media(min-width:800px){
+ main{max-width:900px;margin:auto}
+ .row{grid-template-columns:repeat(4,1fr)}
+}
+</style>
+</head>
+<body>
+<header>
+<h1>🍜 龍あんリーグ｜大阪西</h1>
+<div class="controls">
+<select id="areaFilter"><option value="">エリア全部</option></select>
+<select id="parkingFilter"><option value="">駐車場全部</option><option>あり</option><option>保留</option><option>なし</option></select>
+<select id="statusFilter"><option value="">訪問状況全部</option><option>未訪問</option><option>訪問済</option></select>
+<select id="sort"><option value="area">エリア順</option><option value="rate">俺レート順</option><option value="google">Google順</option><option value="tabelog">食べログ順</option></select>
+<button onclick="addStore()">＋店追加</button>
+<button onclick="exportData()">保存</button>
+<button onclick="document.getElementById('importFile').click()">読込</button>
+<input id="importFile" type="file" accept=".json" hidden onchange="importData(event)">
+</div>
+<div class="small" id="count"></div>
+</header>
+<main id="list"></main>
+<script>
+const initial = [
+["かどや食堂","港","4.3","", "保留","未訪問","","","",""],
+["井筒食堂","港","4.2","", "保留","未訪問","","","",""],
+["つるや食堂","大正","4.2","", "保留","未訪問","","","",""],
+["大衆食堂 よしのや","大正","4.2","", "保留","未訪問","","","",""],
+["よしや","大正","4.3","", "保留","未訪問","","","",""],
+["すみか亭","西淀川","4.3","", "保留","未訪問","","","",""],
+["洋食屋さんkou","西淀川","4.4","", "保留","未訪問","","","",""],
+["舞洲食堂","此花","4.3","", "あり","未訪問","","","",""],
+["八十八亭","淀川","4.3","", "保留","未訪問","","","",""],
+["真水無香","淀川","4.2","3.38","あり","未訪問","","","",""],
+["麺や拓","大阪西","", "3.69","保留","未訪問","","","",""],
+["Ramen 華","大阪西","4.3","", "保留","未訪問","","","",""],
+["中華料理 花宴","大阪西","4.3","", "保留","未訪問","","","",""],
+["若水","大阪西","4.2","", "保留","未訪問","","","",""],
+["麻婆麺専門店 マジン 堀江本店","大阪西","", "3.42","保留","未訪問","","","",""],
+["スイエン 穗苑","大阪西","4.7","", "保留","未訪問","","","",""],
+["ぎょうざ食堂 おおの","住之江・北加賀屋","4.7","", "保留","未訪問","","","",""],
+["中国家庭料理 大娘水餃子北加賀屋店","住之江・北加賀屋","4.3","", "保留","未訪問","","","",""],
+["中華ミーマオマオ","住之江","4.9","", "保留","未訪問","","","",""]
+].map(x=>({name:x[0],area:x[1],google:x[2],tabelog:x[3],parking:x[4],status:x[5],rate:x[6],menu:x[7],price:x[8],note:x[9]}));
+
+let stores = JSON.parse(localStorage.getItem("ryuanLeagueOsakaWest") || "null") || initial;
+
+function save(){localStorage.setItem("ryuanLeagueOsakaWest",JSON.stringify(stores)); render();}
+function areas(){return [...new Set(stores.map(s=>s.area))].sort((a,b)=>a.localeCompare(b,"ja"))}
+function score(s){return parseFloat(s.rate)||-1}
+function render(){
+ const af=document.getElementById("areaFilter"), current=af.value;
+ af.innerHTML='<option value="">エリア全部</option>'+areas().map(a=>`<option ${a===current?'selected':''}>${esc(a)}</option>`).join("");
+ let a=af.value,p=document.getElementById("parkingFilter").value,st=document.getElementById("statusFilter").value;
+ let arr=stores.filter(s=>(!a||s.area===a)&&(!p||s.parking===p)&&(!st||s.status===st));
+ const so=document.getElementById("sort").value;
+ arr.sort((x,y)=>so==="rate"?score(y)-score(x):so==="google"?(parseFloat(y.google)||-1)-(parseFloat(x.google)||-1):so==="tabelog"?(parseFloat(y.tabelog)||-1)-(parseFloat(x.tabelog)||-1):x.area.localeCompare(y.area,"ja"));
+ document.getElementById("count").textContent=`${arr.length}店 / 登録 ${stores.length}店`;
+ const list=document.getElementById("list");
+ list.innerHTML=arr.length?arr.map(s=>card(s)).join(""):'<div id="empty">該当する店がないで。</div>';
+}
+function card(s){
+ const i=stores.indexOf(s);
+ const pc=s.parking==="あり"?"green":s.parking==="保留"?"yellow":"red";
+ return `<div class="card">
+ <div class="name">${esc(s.name)}</div>
+ <span class="badge">${esc(s.area)}</span><span class="badge ${pc}">駐車場：${esc(s.parking||"保留")}</span><span class="badge">${esc(s.status||"未訪問")}</span>
+ <div class="row" style="margin-top:10px">
+  ${field(i,"name","店名")} ${field(i,"area","エリア")}
+  ${field(i,"google","Google")} ${field(i,"tabelog","食べログ")}
+  ${field(i,"parking","駐車場","select","あり|保留|なし")} ${field(i,"status","訪問状況","select","未訪問|訪問済")}
+  ${field(i,"rate","俺レート")} ${field(i,"price","価格")}
+  ${field(i,"menu","食ったもの")} ${field(i,"note","メモ")}
+ </div>
+ <div class="actions"><button onclick="saveRow(${i})">更新</button><button onclick="deleteRow(${i})">削除</button></div>
+ </div>`;
+}
+function field(i,key,label,type="input",opts=""){
+ if(type==="select") return `<div><label>${label}</label><select id="f${i}_${key}">${opts.split("|").map(o=>`<option ${stores[i][key]===o?"selected":""}>${o}</option>`).join("")}</select></div>`;
+ return `<div><label>${label}</label><input id="f${i}_${key}" value="${esc(stores[i][key]||"")}"></div>`;
+}
+function saveRow(i){
+ ["name","area","google","tabelog","parking","status","rate","price","menu","note"].forEach(k=>{
+  const el=document.getElementById(`f${i}_${k}`); if(el) stores[i][k]=el.value;
+ }); save();
+}
+function addStore(){stores.push({name:"新しい店",area:"大阪西",google:"",tabelog:"",parking:"保留",status:"未訪問",rate:"",menu:"",price:"",note:""});save();window.scrollTo(0,document.body.scrollHeight);}
+function deleteRow(i){if(confirm("この店を削除する？")){stores.splice(i,1);save();}}
+function exportData(){
+ const blob=new Blob([JSON.stringify(stores,null,2)],{type:"application/json"});
+ const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="ryuan-league-osaka-west.json";a.click();URL.revokeObjectURL(a.href);
+}
+function importData(e){
+ const f=e.target.files[0];if(!f)return;
+ const r=new FileReader();r.onload=()=>{try{stores=JSON.parse(r.result);save();}catch(_){alert("JSONを読み込めませんでした");}};r.readAsText(f);
+}
+function esc(v){return String(v??"").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m]));}
+document.querySelectorAll("select").forEach(x=>x.addEventListener("change",render));
+render();
+</script>
+</body>
+</html>
